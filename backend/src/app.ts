@@ -1,8 +1,12 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+
 import { config } from './config/env';
+import scanRouter from './routes/scan.routes';
+import { errorHandler } from './middlewares/errorHandler';
 
 const app = express();
 
@@ -34,15 +38,17 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ── API routes (to be registered in future tasks) ────────────────────────────
-// import scanRoutes from './routes/scan.routes';
-// import authRoutes from './routes/auth.routes';
-// app.use('/api/scan', scanRoutes);
-// app.use('/api/auth', authRoutes);
+// ── API routes ────────────────────────────────────────────────────────────────
+app.use('/api/scan', scanRouter);
+// Future routes:
+// app.use('/api/auth', authRouter);
 
 // ── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found.' });
 });
+
+// ── Global error handler (must be last) ──────────────────────────────────────
+app.use(errorHandler);
 
 export default app;

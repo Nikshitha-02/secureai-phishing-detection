@@ -36,6 +36,12 @@ export interface ScanResult {
   checks: SecurityCheck[];
   /** ISO timestamp of when the scan was performed */
   scannedAt: string;
+  /**
+   * Plain-language AI explanation from Gemini.
+   * Always a string — set to the unavailable message if Gemini fails.
+   * Optional so existing mock data and history entries don't break.
+   */
+  aiExplanation?: string;
 }
 
 // ─── Recent Scan (history row) ────────────────────────────────────────────────

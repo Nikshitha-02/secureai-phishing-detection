@@ -1,6 +1,7 @@
 import { ArrowRight, ShieldCheck, Play } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Variants } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 
 /** Staggered fade-up animation for hero children */
@@ -23,6 +24,7 @@ const item: Variants = {
 };
 
 export function Hero() {
+  const navigate = useNavigate();
   return (
     <section
       className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 pt-24 pb-16 text-center sm:px-6 lg:px-8"
@@ -95,6 +97,7 @@ export function Hero() {
             variant="primary"
             size="lg"
             aria-label="Start scanning for phishing threats"
+            onClick={() => navigate('/register')}
           >
             Scan Now
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -103,6 +106,7 @@ export function Hero() {
             variant="outline"
             size="lg"
             aria-label="Learn more about SecureAI features"
+            onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
           >
             <Play className="h-4 w-4" aria-hidden="true" />
             Learn More

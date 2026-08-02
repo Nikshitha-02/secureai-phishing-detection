@@ -7,10 +7,10 @@
  *   idle → scanning → result
  *       ↑_______________|  (via "Scan Another URL" / "Clear")
  *
- * BACKEND INTEGRATION NOTE:
- *   Replace the `simulateScan` call and the `generateMockScanResult` import
- *   with a real API call to your Express backend once it is ready.
- *   The ScanResult type shape is already aligned with the planned API response.
+ * Backend integration: uses urlScannerService.scanUrl() to POST to
+ * the Express API and maps the response through to ResultCard.
+ * All errors (network, timeout, 4xx, 5xx) are surfaced in the
+ * existing error state so the UI never needs to change.
  */
 
 import { useState, useRef, useId } from 'react';
@@ -19,7 +19,7 @@ import { Search, X, Scan, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/features/dashboard/components/LoadingSpinner';
 import { ResultCard } from '@/features/dashboard/components/ResultCard';
-import { generateMockScanResult } from '@/features/dashboard/mockData';
+import { scanUrl } from '@/services/urlScannerService';
 import type { ScanResult } from '@/types/dashboard';
 
 type ScanState = 'idle' | 'scanning' | 'result';
@@ -78,16 +78,17 @@ export function ScannerCard({ onScanComplete }: ScannerCardProps) {
     setScanState('scanning');
     setError(null);
 
-    // ── TODO: Replace with real API call ──────────────────────────────
-    // const result = await urlScannerService.scan(url.trim());
-    // ─────────────────────────────────────────────────────────────────
-    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
-    const mockResult = generateMockScanResult(url.trim());
-    // ─────────────────────────────────────────────────────────────────
-
-    setResult(mockResult);
-    setScanState('result');
-    onScanComplete?.(mockResult);
+    try {
+      // Real API call — replaces the former simulateScan / generateMockScanResult
+      const scanResult = await scanUrl(url.trim());
+      setResult(scanResult);
+      setScanState('result');
+      onScanComplete?.(scanResult);
+    } catch (err) {
+      // scanUrl() always throws a plain user-friendly string on failure
+      setError(typeof err === 'string' ? err : 'An unexpected error occurred. Please try again.');
+      setScanState('idle');
+    }
   }
 
   function handleClear() {
@@ -144,7 +145,7 @@ export function ScannerCard({ onScanComplete }: ScannerCardProps) {
           />
         </div>
 
-        {/* Validation error */}
+        {/* Validation / API error */}
         <AnimatePresence>
           {error && (
             <motion.p

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Shield, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 
 const navLinks = [
@@ -10,6 +11,7 @@ const navLinks = [
 ];
 
 export function Navbar() {
+  const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -71,10 +73,10 @@ export function Navbar() {
 
         {/* Desktop CTA buttons */}
         <div className="hidden md:flex items-center gap-3">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
             Sign In
           </Button>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={() => navigate('/register')}>
             Get Started
           </Button>
         </div>
@@ -122,10 +124,10 @@ export function Navbar() {
                 </li>
               ))}
               <li className="mt-3 flex flex-col gap-2">
-                <Button variant="ghost" size="sm" fullWidth>
+                <Button variant="ghost" size="sm" fullWidth onClick={() => { navigate('/login'); setMenuOpen(false); }}>
                   Sign In
                 </Button>
-                <Button variant="primary" size="sm" fullWidth>
+                <Button variant="primary" size="sm" fullWidth onClick={() => { navigate('/register'); setMenuOpen(false); }}>
                   Get Started
                 </Button>
               </li>
