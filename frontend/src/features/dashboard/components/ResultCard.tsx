@@ -5,14 +5,15 @@
  *   • Risk score dial
  *   • Risk level badge
  *   • Security checks table
+ *   • Score breakdown (per-signal contributions)
  *   • Overall verdict
  *   • 🤖 AI Security Analysis (Gemini explanation)
  */
 
 import { motion } from 'framer-motion';
-import { CheckCircle2, XCircle, Globe, Bot, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Globe, Bot, AlertTriangle, TrendingUp } from 'lucide-react';
 import { RiskBadge } from './RiskBadge';
-import type { ScanResult } from '@/types/dashboard';
+import type { ScanResult, ScoreContribution } from '@/types/dashboard';
 
 interface ResultCardProps {
   result: ScanResult;
@@ -40,11 +41,26 @@ const aiBorder: Record<ScanResult['riskLevel'], string> = {
   dangerous: 'border-red-500/20 bg-red-500/5',
 };
 
+const severityColour: Record<ScoreContribution['severity'], string> = {
+  critical: 'text-red-400 bg-red-400/10 border-red-400/20',
+  high:     'text-orange-400 bg-orange-400/10 border-orange-400/20',
+  medium:   'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+  low:      'text-blue-400 bg-blue-400/10 border-blue-400/20',
+  info:     'text-gray-400 bg-gray-400/10 border-gray-400/20',
+};
+
 export function ResultCard({ result }: ResultCardProps) {
-  const { url, riskScore, riskLevel, verdict, checks, aiExplanation } = result;
+  const { url, riskScore, riskLevel, verdict, checks, scoreBreakdown, aiExplanation } = result;
 
   const isAiUnavailable =
     !aiExplanation || aiExplanation === AI_UNAVAILABLE;
+
+  // Only show triggered signals (points > 0), sorted by points descending
+  const triggeredSignals = scoreBreakdown
+    ? scoreBreakdown
+        .filter((s) => s.points > 0)
+        .sort((a, b) => b.points - a.points)
+    : [];
 
   return (
     <motion.div
@@ -139,6 +155,44 @@ export function ResultCard({ result }: ResultCardProps) {
           ))}
         </div>
       </div>
+
+      {/* ── Score Breakdown ────────────────────────────────────────────── */}
+      {triggeredSignals.length > 0 && (
+        <div>
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+            <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
+            Score Breakdown
+          </h3>
+          <div className="space-y-2" aria-label="Score breakdown by signal">
+            {triggeredSignals.map((signal, i) => (
+              <motion.div
+                key={signal.signal}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, delay: 0.04 * i }}
+                className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={[
+                      'flex-shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium capitalize',
+                      severityColour[signal.severity],
+                    ].join(' ')}
+                  >
+                    {signal.severity}
+                  </span>
+                  <span className="text-sm text-gray-300 truncate" title={signal.description}>
+                    {signal.description}
+                  </span>
+                </div>
+                <span className="flex-shrink-0 text-sm font-semibold tabular-nums text-red-400">
+                  +{signal.points}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Overall Verdict ────────────────────────────────────────────── */}
       <div

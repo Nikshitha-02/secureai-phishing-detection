@@ -48,10 +48,24 @@ export const config = {
 
   /**
    * Gemini model name. Read from GEMINI_MODEL env var.
-   * Defaults to gemini-2.5-flash if not set.
+   * Defaults to gemini-2.0-flash if not set.
    * Change this in .env to switch models without touching source code.
    */
   GEMINI_MODEL: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+
+  /**
+   * Hard timeout (milliseconds) for a single Gemini generateContent call.
+   *
+   * If Gemini does not respond within this window, the request is aborted
+   * and the deterministic fallback explanation is used immediately.
+   *
+   * Default: 5000 ms (5 seconds).
+   * Set GEMINI_TIMEOUT_MS=0 to disable the timeout (not recommended).
+   *
+   * This is the primary protection against Gemini 503 / slow-response
+   * causing the entire POST /api/scan to block and time out on the client.
+   */
+  GEMINI_TIMEOUT_MS: Number(process.env.GEMINI_TIMEOUT_MS ?? 5000),
 } as const;
 
 export type Config = typeof config;

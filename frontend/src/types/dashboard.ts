@@ -10,6 +10,23 @@
 
 export type RiskLevel = 'safe' | 'suspicious' | 'dangerous';
 
+// ─── Score Breakdown ──────────────────────────────────────────────────────────
+
+/**
+ * A single signal's contribution to the aggregate risk score.
+ * Mirrors backend/src/models/scan.model.ts ScoreContribution.
+ */
+export interface ScoreContribution {
+  /** Machine-readable signal identifier, e.g. "noHttps", "brandImpersonation" */
+  signal: string;
+  /** Human-readable description of what was detected */
+  description: string;
+  /** Points this signal contributed (can be negative for discounts) */
+  points: number;
+  /** Severity classification for UI display */
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+}
+
 // ─── Scan Result ─────────────────────────────────────────────────────────────
 
 /** A single security check performed on a URL. */
@@ -34,6 +51,12 @@ export interface ScanResult {
   verdict: string;
   /** Ordered list of individual security checks */
   checks: SecurityCheck[];
+  /**
+   * Per-signal score breakdown — explains exactly how the aggregate score was reached.
+   * Each entry names the signal, describes what was detected, and states how many
+   * points it contributed. Optional for backward compat with history rows.
+   */
+  scoreBreakdown?: ScoreContribution[];
   /** ISO timestamp of when the scan was performed */
   scannedAt: string;
   /**
@@ -42,6 +65,14 @@ export interface ScanResult {
    * Optional so existing mock data and history entries don't break.
    */
   aiExplanation?: string;
+
+  /**
+   * Identifies which layer produced the explanation.
+   * "gemini" = Gemini returned a successful response.
+   * "deterministic" = fallback explanation built from rule-engine signals.
+   * Optional for backward compat with history entries.
+   */
+  aiExplanationProvider?: 'gemini' | 'deterministic';
 }
 
 // ─── Recent Scan (history row) ────────────────────────────────────────────────

@@ -115,7 +115,9 @@ async function runTests(): Promise<void> {
   for (const tc of TEST_CASES) {
     let result;
     try {
-      result = await scanUrl(tc.url);
+      // Pass a dummy userId for tests — persistence is a no-op when
+      // SUPABASE_SERVICE_ROLE_KEY is not configured in the test environment.
+      result = await scanUrl(tc.url, 'test-user-id');
     } catch (err) {
       console.log(`${RED}✗ FAIL${RESET} — ${tc.url}`);
       console.log(`       Error: ${(err as Error).message}`);

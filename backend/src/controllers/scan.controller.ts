@@ -5,14 +5,15 @@
  *
  * Responsibilities:
  *  1. Extract and validate the request body
- *  2. Delegate to scan.service for business logic
- *  3. Return a clean JSON response with the correct HTTP status
- *  4. Forward unexpected errors to the global error handler via next()
+ *  2. Read userId from res.locals (set by requireAuth middleware)
+ *  3. Delegate to scan.service for business logic + persistence
+ *  4. Return a clean JSON response with the correct HTTP status
+ *  5. Forward unexpected errors to the global error handler via next()
  */
 
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { scanUrl, InvalidUrlError } from '../services/scan.service';
-import { ScanRequest } from '../models/scan.model';
+import type { ScanRequest } from '../models/scan.model';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/scan
@@ -53,12 +54,15 @@ export async function scanUrlController(
       return;
     }
 
-    // ── Business logic ──────────────────────────────────────────────────────
-    const result = await scanUrl(trimmed);
+    // ── User id from auth middleware ────────────────────────────────────────
+    // requireAuth already validated the JWT and set res.locals.userId.
+    const userId: string = res.locals.userId;
+
+    // ── Business logic + persistence ────────────────────────────────────────
+    const result = await scanUrl(trimmed, userId);
 
     res.status(200).json(result);
   } catch (err) {
-    // InvalidUrlError → 400 Bad Request (user input problem)
     if (err instanceof InvalidUrlError) {
       res.status(400).json({
         error: 'Invalid URL',
@@ -66,8 +70,6 @@ export async function scanUrlController(
       });
       return;
     }
-
-    // Everything else → 500 (pass to global error handler)
     next(err);
   }
 }

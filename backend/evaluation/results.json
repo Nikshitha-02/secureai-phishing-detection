@@ -1,0 +1,787 @@
+{
+  "generatedAt": "2026-09-04T08:39:28.536Z",
+  "dataset": {
+    "total": 80,
+    "safe": 28,
+    "suspicious": 24,
+    "phishing": 28,
+    "development": 66,
+    "heldOut": 14
+  },
+  "development": {
+    "totalEntries": 66,
+    "correct": 51,
+    "accuracy": 0.7727,
+    "macroPrecision": 0.8684,
+    "macroRecall": 0.75,
+    "macroF1": 0.718,
+    "perClass": {
+      "SAFE": {
+        "tp": 23,
+        "fp": 15,
+        "fn": 0,
+        "tn": 28,
+        "precision": 0.6053,
+        "recall": 1,
+        "f1": 0.7541
+      },
+      "SUSPICIOUS": {
+        "tp": 5,
+        "fp": 0,
+        "fn": 15,
+        "tn": 46,
+        "precision": 1,
+        "recall": 0.25,
+        "f1": 0.4
+      },
+      "PHISHING": {
+        "tp": 23,
+        "fp": 0,
+        "fn": 0,
+        "tn": 43,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    "binary": {
+      "tp": 23,
+      "fp": 0,
+      "fn": 0,
+      "tn": 43,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0
+    },
+    "confusionMatrix": {
+      "SAFE": {
+        "SAFE": 23,
+        "SUSPICIOUS": 0,
+        "PHISHING": 0
+      },
+      "SUSPICIOUS": {
+        "SAFE": 15,
+        "SUSPICIOUS": 5,
+        "PHISHING": 0
+      },
+      "PHISHING": {
+        "SAFE": 0,
+        "SUSPICIOUS": 0,
+        "PHISHING": 23
+      }
+    },
+    "falsePositives": [],
+    "falseNegatives": []
+  },
+  "heldOut": {
+    "totalEntries": 14,
+    "correct": 11,
+    "accuracy": 0.7857,
+    "macroPrecision": 0.875,
+    "macroRecall": 0.75,
+    "macroF1": 0.7231,
+    "perClass": {
+      "SAFE": {
+        "tp": 5,
+        "fp": 3,
+        "fn": 0,
+        "tn": 6,
+        "precision": 0.625,
+        "recall": 1,
+        "f1": 0.7692
+      },
+      "SUSPICIOUS": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 3,
+        "tn": 10,
+        "precision": 1,
+        "recall": 0.25,
+        "f1": 0.4
+      },
+      "PHISHING": {
+        "tp": 5,
+        "fp": 0,
+        "fn": 0,
+        "tn": 9,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      }
+    },
+    "binary": {
+      "tp": 5,
+      "fp": 0,
+      "fn": 0,
+      "tn": 9,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0
+    },
+    "confusionMatrix": {
+      "SAFE": {
+        "SAFE": 5,
+        "SUSPICIOUS": 0,
+        "PHISHING": 0
+      },
+      "SUSPICIOUS": {
+        "SAFE": 3,
+        "SUSPICIOUS": 1,
+        "PHISHING": 0
+      },
+      "PHISHING": {
+        "SAFE": 0,
+        "SUSPICIOUS": 0,
+        "PHISHING": 5
+      }
+    },
+    "falsePositives": [],
+    "falseNegatives": []
+  },
+  "allEntries": [
+    {
+      "url": "https://google.com",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://www.google.com",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://mail.google.com/mail/u/0/",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://accounts.google.com/signin/v2/identifier",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://github.com/microsoft/vscode",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://stackoverflow.com/questions/tagged/javascript",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://www.amazon.com/gp/cart/view.html",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://www.paypal.com/signin",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://netflix.com/login",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://discord.com/login",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://npmjs.com/package/react",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://docs.microsoft.com/en-us/azure/security/",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://outlook.live.com/mail/0/",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://stripe.com/docs/payments",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://app.slack.com/client",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://zoom.us/signin",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://web.whatsapp.com/",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://www.apple.com/shop/buy-iphone",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://id.apple.com/account/reset/iforgot.action",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://figma.com/login",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://notion.so/login",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://proton.me/mail",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "http://bit.ly/3xAb2Yz",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SUSPICIOUS",
+      "riskScore": 35,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://tinyurl.com/y7k3mfpq",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://rb.gy/qx8rjt",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "http://example.com/login",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 25,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://cheap-hosting.xyz/signup",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "http://deals.info/free-voucher?code=WIN100",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SUSPICIOUS",
+      "riskScore": 40,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://login.someunknownsite.online/user/verify",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 20,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://www.newstartup.club/register",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://api.someservice.cc/oauth/callback",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://www.company-portal.biz/employee/login?redirect=/dashboard",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 20,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "http://192.168.100.5/admin",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SUSPICIOUS",
+      "riskScore": 70,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://cutt.ly/TwZ8kQp",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://unknown-blog.info/2024/01/how-to-reset-your-password-step-by-step-guide-tutorial-complete",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SUSPICIOUS",
+      "riskScore": 35,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "http://newsletter.click/open?m=abc&u=xyz&c=123&utm_source=email",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SUSPICIOUS",
+      "riskScore": 35,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://downloads.work/tool?ref=partner&id=99182736",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://cdn.staticfiles.pw/assets/script.js",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://my-account-portal.com/reset-password?token=abc123xyz",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://user.online-platform.site/profile/verify",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 20,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://files.download.stream/setup.exe",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://m.unknown-store.fun/checkout?item=shirt&qty=1",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "development"
+    },
+    {
+      "url": "https://paypa1-secure.login.verify-account.tk",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 90,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://google-login.xyz/signin?redirect=gmail",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "http://192.168.1.1/login",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 75,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "http://203.0.113.45/paypal/login.php",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 75,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://paypal-update-billing.ml",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 80,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://signin.amazon-account-verify.tk/ap/signin",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://amazon-prime-renewal.gq/payment",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://microsoft-account-security.live/password/reset",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://apple-id-suspended-verify.xyz/account/recover",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://icloud-account-unlock.cf/login",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://facebook-login.support-team.xyz/checkpoint",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 80,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://instagram-verify-account.ml/",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 80,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://netflix-subscription-renewal.tk/signin",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://login.secure.paypal-helpdesk.com/update",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 80,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://bankofamerica-secure-login.gq/verify",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://wellsfargo-account-update.ml/signin",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://github-security-alert.ml/account/verify",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://discord-nitro-free.site/claim",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://dropbox-shared-document.xyz/login?file=invoice_2024.pdf",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://accounts.google.com.signin-recovery.xyz/recover",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://support.apple.com.account-locked-verify.tk/unlock",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://free-gift-claim.xyz/winner?user=target&prize=iphone",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 80,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "http://login-update.bankofamerica-secure.net/account/confirm",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 95,
+      "correct": true,
+      "set": "development"
+    },
+    {
+      "url": "https://github.com/login",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://www.linkedin.com/login",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://portal.azure.com/",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://www.reddit.com/r/programming",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://www.dropbox.com/login",
+      "groundTruth": "SAFE",
+      "predictedLevel": "SAFE",
+      "riskScore": 0,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "http://mysite.biz/account/settings",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SUSPICIOUS",
+      "riskScore": 40,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://track.marketing-email.live/unsubscribe?id=abc123",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "held-out"
+    },
+    {
+      "url": "https://is.gd/Xm7yBa",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "held-out"
+    },
+    {
+      "url": "https://app.newservice.vip/dashboard",
+      "groundTruth": "SUSPICIOUS",
+      "predictedLevel": "SAFE",
+      "riskScore": 15,
+      "correct": false,
+      "set": "held-out"
+    },
+    {
+      "url": "https://secure-paypal-login.com/verify-account",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 75,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://login-microsoftonline.com.verify-email.ml/auth",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 90,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://netfIix-billing-update.com/account/payment",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 75,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://chase-online-banking-secure.xyz/login/credential",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "held-out"
+    },
+    {
+      "url": "https://www.paypal.com.secure-payment-alert.ml/login",
+      "groundTruth": "PHISHING",
+      "predictedLevel": "PHISHING",
+      "riskScore": 100,
+      "correct": true,
+      "set": "held-out"
+    }
+  ]
+}

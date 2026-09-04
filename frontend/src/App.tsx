@@ -14,31 +14,35 @@
  *   /login            → LoginPage
  *   /register         → RegisterPage
  *   /forgot-password  → ForgotPasswordPage
- *   /verify-email     → VerifyEmailPage   (Supabase email-confirm redirect)
- *   /reset-password   → (scaffold later)
+ *   /verify-email     → VerifyEmailPage
  *
  * Protected routes (redirect to /login if not authenticated):
- *   /dashboard        → DashboardPage
- *   (future: /history, /scan/url, /scan/email …)
- *
- * The <ProtectedRoute> wrapper handles two concerns automatically:
- *   • Shows a full-screen spinner while the session is being restored on
- *     a hard refresh (loading === true).
- *   • Redirects to /login preserving the attempted URL in location.state.from
- *     so LoginPage can send the user back after successful sign-in.
+ *   All rendered inside DashboardLayout which provides sidebar + header.
+ *   /dashboard  → DashboardPage   (default authenticated page)
+ *   /scanner    → ScannerPage
+ *   /history    → HistoryPage
+ *   /reports    → ReportsPage
+ *   /settings   → SettingsPage
  */
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
+import { DashboardLayout } from '@/layouts/DashboardLayout';
 
-// Pages
+// Pages — public
 import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { VerifyEmailPage } from '@/pages/VerifyEmailPage';
+
+// Pages — protected (rendered inside DashboardLayout)
 import { DashboardPage } from '@/pages/DashboardPage';
+import { ScannerPage } from '@/pages/ScannerPage';
+import { HistoryPage } from '@/pages/HistoryPage';
+import { ReportsPage } from '@/pages/ReportsPage';
+import { SettingsPage } from '@/pages/SettingsPage';
 
 function App() {
   return (
@@ -57,21 +61,19 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
-          {/* /reset-password is handled by Supabase's email link;
-              scaffold the "enter new password" page in a follow-up task */}
 
-          {/* ── Protected ── */}
+          {/* ── Protected (all inside DashboardLayout) ── */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            {/* Add more protected routes here as features are built:
-                <Route path="/history"   element={<HistoryPage />}   />
-                <Route path="/scan/url"  element={<UrlScanPage />}   />
-                <Route path="/scan/email" element={<EmailScanPage />} />
-            */}
+            <Route element={<DashboardLayout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/scanner"   element={<ScannerPage />} />
+              <Route path="/history"   element={<HistoryPage />} />
+              <Route path="/reports"   element={<ReportsPage />} />
+              <Route path="/settings"  element={<SettingsPage />} />
+            </Route>
           </Route>
 
           {/* ── Fallback ── */}
-          {/* Unknown paths redirect to the landing page */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

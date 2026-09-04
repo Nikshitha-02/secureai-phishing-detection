@@ -11,6 +11,28 @@
  * It does NOT decide whether a URL is phishing.
  * The rule engine's verdict (riskLevel, riskScore) is the source of truth.
  *
+ * ─── Failure handling ────────────────────────────────────────────────────────
+ * Every possible Gemini failure mode is handled gracefully:
+ *   - 400, 401, 403, 404, 429, 500, 502, 503  → deterministic fallback
+ *   - Network error / ECONNRESET / ENOTFOUND   → deterministic fallback
+ *   - Timeout (GEMINI_TIMEOUT_MS)              → deterministic fallback
+ *   - Empty response                           → deterministic fallback
+ *   - Any unexpected thrown value              → deterministic fallback
+ *
+ * In every failure case:
+ *   • POST /api/scan returns HTTP 200 with the full security result
+ *   • aiExplanation is a useful dynamic description (not a static error string)
+ *   • aiExplanationProvider = "deterministic"
+ *   • The scan result is persisted normally
+ *   • The frontend NEVER times out waiting for Gemini
+ *
+ * ─── Timeout mechanism ───────────────────────────────────────────────────────
+ * The Gemini SDK does not expose an AbortSignal option in all versions, so we
+ * use Promise.race() with a timer promise.  The timer rejects after
+ * GEMINI_TIMEOUT_MS milliseconds (default 5 000 ms), which causes the race to
+ * settle on the fallback path immediately — the slow Gemini fetch continues
+ * in the background but its result is discarded.
+ *
  * ─── Swapping AI providers ───────────────────────────────────────────────────
  * To swap Gemini for another provider (OpenAI, Anthropic, Cohere…):
  *   1. Create a new class implementing IAiExplainer
@@ -23,29 +45,130 @@ import { config } from '../config/env';
 import type { ScanResponse } from '../models/scan.model';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Provider types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Which layer produced the explanation in the scan response. */
+export type AiExplanationProvider = 'gemini' | 'deterministic';
+
+export interface ExplanationResult {
+  explanation: string;
+  provider: AiExplanationProvider;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Provider interface
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface IAiExplainer {
-  generateExplanation(scanResult: ScanResponse): Promise<string>;
+  /** Never throws. Always returns a non-empty explanation + provider label. */
+  generateExplanation(scanResult: ScanResponse): Promise<ExplanationResult>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const AI_UNAVAILABLE_MESSAGE = 'AI explanation is temporarily unavailable.';
-
-const GEMINI_ENDPOINT_BASE = 'https://generativelanguage.googleapis.com';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Error classifier
+// Dynamic deterministic explanation
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Extracts the fullest possible diagnostic from any thrown value and logs it.
- * Returns a short human-readable reason string for callers.
+ * Builds a plain-language explanation from the rule-engine result.
+ *
+ * Used when Gemini is unavailable, too slow, or returns an error.
+ * The text is fully dynamic — derived from the actual scan signals.
+ * Never returns a generic "unavailable" message.
  */
+export function buildDeterministicExplanation(scan: ScanResponse): string {
+  const { riskLevel, riskScore, checks } = scan;
+
+  // Collect the triggered signals in human-readable form
+  const signals: string[] = [];
+
+  if (checks.brandImpersonation) {
+    signals.push(
+      `the domain appears to impersonate the "${checks.brandImpersonation.brand}" brand`,
+    );
+  }
+  if (checks.ipAddress) {
+    signals.push('the hostname is a raw IP address rather than a registered domain name');
+  }
+  if (!checks.https) {
+    signals.push('the connection is unencrypted (HTTP instead of HTTPS)');
+  }
+  if (checks.suspiciousTld) {
+    signals.push('the top-level domain is associated with high-risk or abused registrations');
+  }
+  if (checks.urlShortener) {
+    signals.push('the URL passes through a shortener service that hides the real destination');
+  }
+  if (checks.manySubdomains) {
+    signals.push('the hostname uses excessive subdomain nesting');
+  }
+  if (checks.hyphenCount > 2) {
+    signals.push(`the domain contains ${checks.hyphenCount} hyphens, a common pattern in machine-generated phishing domains`);
+  }
+  if (checks.hasEncodedChars) {
+    signals.push('the URL contains percent-encoded characters that can be used to obfuscate malicious paths');
+  }
+  if (checks.suspiciousKeywords.length > 0) {
+    const kws = checks.suspiciousKeywords.slice(0, 3).join(', ');
+    signals.push(`the URL contains action-oriented keywords (${kws}) commonly used in phishing lures`);
+  }
+  if (checks.reputation.status === 'malicious') {
+    signals.push(
+      `the domain was flagged as malicious by ${checks.reputation.source ?? 'the reputation provider'}`,
+    );
+  }
+
+  // Build the explanation text
+  if (riskLevel === 'Safe') {
+    if (signals.length === 0) {
+      return (
+        `SecureAI examined this URL and found no significant risk indicators. ` +
+        `The domain is recognised as trusted, the connection uses HTTPS, and no ` +
+        `suspicious patterns were detected. It is safe to proceed.`
+      );
+    }
+    return (
+      `SecureAI examined this URL and found only minor signals: ${signals.join('; ')}. ` +
+      `The overall risk score is ${riskScore}/100, which falls within the safe range. ` +
+      `No action is required, but you may wish to verify the destination.`
+    );
+  }
+
+  if (signals.length === 0) {
+    // Shouldn't happen — non-safe URLs always trigger at least one signal
+    return (
+      `SecureAI assigned a risk score of ${riskScore}/100 to this URL, ` +
+      `placing it in the ${riskLevel} category. Exercise caution before proceeding.`
+    );
+  }
+
+  const signalSummary =
+    signals.length === 1
+      ? signals[0]
+      : signals.slice(0, -1).join('; ') + '; and ' + signals[signals.length - 1];
+
+  if (riskLevel === 'Suspicious') {
+    return (
+      `SecureAI flagged this URL as Suspicious (score: ${riskScore}/100) because ` +
+      `${signalSummary}. ` +
+      `While not definitively malicious, these signals warrant caution. ` +
+      `Verify the destination independently before entering any credentials or personal information.`
+    );
+  }
+
+  // Dangerous
+  return (
+    `SecureAI classified this URL as Dangerous (score: ${riskScore}/100) because ` +
+    `${signalSummary}. ` +
+    `Do not enter any credentials, payment details, or personal information on this page. ` +
+    `If you arrived here from an email or message, that communication may be a phishing attempt.`
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Error classifier (logging only — never affects the return path)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function logAndClassifyError(context: string, err: unknown): string {
   const e = err as Record<string, unknown>;
   const name    = String(e?.name    ?? 'UnknownError');
@@ -55,86 +178,35 @@ function logAndClassifyError(context: string, err: unknown): string {
                   (e?.httpStatus as number | undefined) ??
                   (cause?.status as number | undefined);
 
-  // Full dump — always print so nothing is hidden
   console.error(`[${context}] ─── ERROR ───────────────────────────────`);
   console.error(`  name      : ${name}`);
   console.error(`  message   : ${message}`);
   console.error(`  HTTP status: ${status ?? '(not available)'}`);
-
   if (cause) {
-    console.error(`  cause.name   : ${cause.name ?? '—'}`);
-    console.error(`  cause.message: ${cause.message ?? '—'}`);
-    console.error(`  cause.code   : ${cause.code ?? '—'}`);
+    console.error(`  cause.code: ${cause.code ?? '—'}`);
   }
-
-  // Stack — trim to first 6 frames to keep logs readable
   const stack = String(e?.stack ?? '');
   if (stack) {
-    console.error(`  stack (first 6 lines):`);
-    stack.split('\n').slice(0, 6).forEach(l => console.error(`    ${l}`));
+    stack.split('\n').slice(0, 4).forEach(l => console.error(`    ${l}`));
   }
   console.error(`[${context}] ────────────────────────────────────────`);
 
-  // ── Classify into a short reason ─────────────────────────────────────────
+  const msg = message + ' ' + String(cause?.code ?? '') + ' ' + String(cause?.message ?? '');
 
-  // 429 — quota exhausted (can be wrapped inside "fetch failed")
-  if (message.includes('429') || message.includes('RESOURCE_EXHAUSTED') || message.includes('quota')) {
-    console.error(
-      `[${context}] DIAGNOSIS: Free-tier quota exhausted (429 RESOURCE_EXHAUSTED).\n` +
-      `  The daily or per-minute request limit for model "${config.GEMINI_MODEL}" has been reached.\n` +
-      `  Free-tier limits: https://ai.google.dev/gemini-api/docs/rate-limits\n` +
-      `  Resolution: Wait for the quota to reset (daily limit resets at midnight US/Pacific),\n` +
-      `              or upgrade to a paid API key, or switch to a model with remaining quota.`
-    );
-    return 'quota_exceeded';
-  }
-
-  // 404 — model not available for this key tier
-  if (message.includes('404') || message.includes('no longer available')) {
-    console.error(
-      `[${context}] DIAGNOSIS: Model not found (404).\n` +
-      `  Model "${config.GEMINI_MODEL}" is not available for this API key tier.\n` +
-      `  Resolution: Change GEMINI_MODEL in backend/.env to a supported model.`
-    );
-    return 'model_not_found';
-  }
-
-  // 401 / 403 — bad API key
-  if (message.includes('401') || message.includes('403') || message.includes('API_KEY') || message.includes('permission')) {
-    console.error(
-      `[${context}] DIAGNOSIS: Authentication failed (401/403).\n` +
-      `  The GEMINI_API_KEY may be invalid, revoked, or missing required permissions.\n` +
-      `  Resolution: Regenerate the key at https://aistudio.google.com/app/apikey`
-    );
-    return 'auth_failed';
-  }
-
-  // fetch failed / ECONNREFUSED / ENOTFOUND — network issues
+  if (name === 'GeminiTimeout') return 'timeout';
+  if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota')) return 'quota_exceeded';
+  if (msg.includes('503') || msg.includes('Service Unavailable') || msg.includes('overloaded') || msg.includes('high demand')) return 'service_unavailable';
+  if (msg.includes('502') || msg.includes('Bad Gateway'))    return 'bad_gateway';
+  if (msg.includes('500'))                                   return 'server_error';
+  if (msg.includes('404') || msg.includes('no longer available')) return 'model_not_found';
+  if (msg.includes('401') || msg.includes('403') || msg.includes('API_KEY') || msg.includes('permission')) return 'auth_failed';
+  if (msg.includes('400'))                                   return 'bad_request';
   if (
-    name === 'TypeError' && message.toLowerCase().includes('fetch') ||
-    message.includes('ECONNREFUSED') ||
-    message.includes('ENOTFOUND') ||
-    message.includes('ECONNRESET') ||
-    message.includes('ETIMEDOUT') ||
-    (cause && String(cause.code).startsWith('E'))
-  ) {
-    const causeCode = cause?.code ?? cause?.message ?? 'unknown';
-    console.error(
-      `[${context}] DIAGNOSIS: Network / connectivity failure.\n` +
-      `  The SDK could not reach ${GEMINI_ENDPOINT_BASE}\n` +
-      `  Underlying cause: ${causeCode}\n` +
-      `  Possible reasons:\n` +
-      `    • No internet connection\n` +
-      `    • DNS resolution failure (ENOTFOUND)\n` +
-      `    • Firewall / corporate proxy blocking outbound HTTPS\n` +
-      `    • VPN intercepting TLS (SSL certificate error)\n` +
-      `    • Proxy not configured in NODE env (set HTTPS_PROXY if behind a proxy)\n` +
-      `  Resolution: Test with: curl https://generativelanguage.googleapis.com`
-    );
-    return 'network_failure';
-  }
+    (name === 'TypeError' && message.toLowerCase().includes('fetch')) ||
+    msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND') ||
+    msg.includes('ECONNRESET')  || msg.includes('ETIMEDOUT')
+  ) return 'network_failure';
 
-  console.error(`[${context}] DIAGNOSIS: Unexpected error — see full dump above.`);
   return 'unknown';
 }
 
@@ -155,19 +227,16 @@ export function buildExplanationPrompt(scan: ScanResponse): string {
   if (checks.manySubdomains)  triggeredChecks.push('Hostname has excessive subdomains');
   if (checks.hasEncodedChars) triggeredChecks.push('URL contains percent-encoded characters');
   if (checks.hyphenCount > 2) triggeredChecks.push(`Hostname has ${checks.hyphenCount} hyphens`);
-
   if (checks.suspiciousKeywords.length > 0) {
     triggeredChecks.push(
       `Contains phishing keywords: ${checks.suspiciousKeywords.slice(0, 4).join(', ')}`,
     );
   }
-
   if (checks.brandImpersonation) {
     triggeredChecks.push(
       `Appears to impersonate "${checks.brandImpersonation.brand}" brand`,
     );
   }
-
   if (checks.reputation.status === 'malicious') {
     triggeredChecks.push(
       `Flagged as malicious by ${checks.reputation.source ?? 'reputation provider'}`,
@@ -212,41 +281,113 @@ Rules:
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Gemini implementation
+// Gemini implementation — with hard timeout + immediate fallback
 // ─────────────────────────────────────────────────────────────────────────────
 
 class GeminiExplainer implements IAiExplainer {
   private readonly model;
   private readonly modelName: string;
+  private readonly timeoutMs: number;
 
-  constructor(apiKey: string, modelName: string) {
+  constructor(apiKey: string, modelName: string, timeoutMs: number) {
     const genAI = new GoogleGenerativeAI(apiKey);
     this.modelName = modelName;
+    this.timeoutMs = timeoutMs;
     this.model = genAI.getGenerativeModel({ model: modelName });
   }
 
-  async generateExplanation(scanResult: ScanResponse): Promise<string> {
+  async generateExplanation(scanResult: ScanResponse): Promise<ExplanationResult> {
     const prompt = buildExplanationPrompt(scanResult);
+    const start = Date.now();
 
     try {
-      const result = await this.model.generateContent(prompt);
+      // ── Hard timeout via Promise.race ─────────────────────────────────────
+      // The Gemini SDK wraps the native fetch — we cannot inject an AbortSignal
+      // through the public API in all SDK versions. Promise.race gives us a
+      // reliable upper bound: if Gemini takes longer than timeoutMs the timeout
+      // promise rejects first and we fall through to the deterministic path.
+      // The underlying fetch continues in the background but its result is
+      // discarded — it cannot affect the response we already sent.
+
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+      const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        timeoutHandle = setTimeout(() => {
+          const e = new Error(
+            `Gemini did not respond within ${this.timeoutMs}ms — using deterministic fallback`,
+          );
+          e.name = 'GeminiTimeout';
+          reject(e);
+        }, this.timeoutMs);
+      });
+
+      const geminiPromise = this.model.generateContent(prompt);
+
+      // Race: whichever settles first wins
+      const result = await Promise.race([geminiPromise, timeoutPromise]);
+
+      // Clear the timeout so the Node process is not kept alive by the timer
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+
+      const elapsed = Date.now() - start;
       const text = result.response.text().trim();
-      if (!text) return AI_UNAVAILABLE_MESSAGE;
-      return text;
+
+      if (!text) {
+        console.warn(
+          `[GeminiExplainer] Empty response from model "${this.modelName}" ` +
+          `(${elapsed}ms) — using deterministic fallback`,
+        );
+        return {
+          explanation: buildDeterministicExplanation(scanResult),
+          provider: 'deterministic',
+        };
+      }
+
+      console.log(
+        `[GeminiExplainer] ✓ Explanation received from "${this.modelName}" in ${elapsed}ms`,
+      );
+      return { explanation: text, provider: 'gemini' };
+
     } catch (err) {
-      logAndClassifyError(`GeminiExplainer model=${this.modelName}`, err);
-      return AI_UNAVAILABLE_MESSAGE;
+      const elapsed = Date.now() - start;
+      const reason = logAndClassifyError(
+        `GeminiExplainer model=${this.modelName} (${elapsed}ms)`,
+        err,
+      );
+
+      // Log a concise action line per failure type
+      const advice: Record<string, string> = {
+        timeout:          `⚠ Gemini timed out after ${elapsed}ms — deterministic fallback used.`,
+        quota_exceeded:   '⚠ Gemini quota exhausted (429) — deterministic fallback used.',
+        service_unavailable: '⚠ Gemini returned 503 (high demand) — deterministic fallback used immediately.',
+        bad_gateway:      '⚠ Gemini returned 502 — deterministic fallback used.',
+        server_error:     '⚠ Gemini returned 500 — deterministic fallback used.',
+        model_not_found:  `✗ Model "${this.modelName}" not found (404) — update GEMINI_MODEL in .env.`,
+        auth_failed:      '✗ Gemini auth failed (401/403) — check GEMINI_API_KEY.',
+        bad_request:      '⚠ Gemini rejected the request (400) — deterministic fallback used.',
+        network_failure:  '⚠ Gemini network failure — deterministic fallback used.',
+        unknown:          '⚠ Unexpected Gemini error — deterministic fallback used.',
+      };
+      console.warn(`[GeminiExplainer] ${advice[reason] ?? advice.unknown}`);
+
+      return {
+        explanation: buildDeterministicExplanation(scanResult),
+        provider: 'deterministic',
+      };
     }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// No-op explainer
+// No-op explainer (when API key not configured)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class NoopExplainer implements IAiExplainer {
-  async generateExplanation(_scanResult: ScanResponse): Promise<string> {
-    return AI_UNAVAILABLE_MESSAGE;
+  async generateExplanation(scanResult: ScanResponse): Promise<ExplanationResult> {
+    return {
+      explanation: buildDeterministicExplanation(scanResult),
+      provider: 'deterministic',
+    };
   }
 }
 
@@ -255,21 +396,34 @@ class NoopExplainer implements IAiExplainer {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Sends a tiny prompt to Gemini at startup to verify the full stack works:
- * API key → model → network → response.
- *
- * Does NOT throw — a health-check failure must never crash the server.
- * Result is purely informational; it does not affect request handling.
+ * Sends a tiny prompt to Gemini at startup to verify API key + model.
+ * Does NOT throw — health-check failure never crashes the server.
+ * Uses its own short timeout to avoid blocking startup.
  */
 export async function runGeminiHealthCheck(apiKey: string, modelName: string): Promise<void> {
+  const HEALTH_TIMEOUT_MS = 8000; // generous for startup — not a user request
   console.log(`[Gemini] Running startup health check (model: ${modelName}) ...`);
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent('Reply with only the word: OK');
-    const text = result.response.text().trim();
 
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timeoutHandle = setTimeout(() => {
+        const e = new Error(`Health check timed out after ${HEALTH_TIMEOUT_MS}ms`);
+        e.name = 'GeminiTimeout';
+        reject(e);
+      }, HEALTH_TIMEOUT_MS);
+    });
+
+    const result = await Promise.race([
+      model.generateContent('Reply with only the word: OK'),
+      timeoutPromise,
+    ]);
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+
+    const text = result.response.text().trim();
     if (text) {
       console.log(`[Gemini] ✓ Connection successful. Model response: "${text}"`);
     } else {
@@ -278,22 +432,25 @@ export async function runGeminiHealthCheck(apiKey: string, modelName: string): P
   } catch (err) {
     const reason = logAndClassifyError('Gemini health check', err);
 
-    // Print a final, action-oriented line based on classified reason
     const advice: Record<string, string> = {
+      timeout:
+        `⚠ Health check timed out — Gemini is reachable but slow. ` +
+        `Scan explanations will use the deterministic fallback if Gemini exceeds ${config.GEMINI_TIMEOUT_MS}ms.`,
       quota_exceeded:
-        '⚠ Quota exhausted — AI explanations will return the fallback message until the quota resets. ' +
-        'The rest of the API (rule engine, scan results) works normally.',
+        '⚠ Quota exhausted — AI explanations will use the deterministic fallback until the quota resets. ' +
+        'The rule engine, scan results, and persistence work normally.',
+      service_unavailable:
+        '⚠ Gemini returned 503 (high demand) — AI explanations will fall back to deterministic. ' +
+        'The scanner itself is unaffected.',
       model_not_found:
-        '✗ Model unavailable — update GEMINI_MODEL in backend/.env to a supported model.',
+        `✗ Model "${modelName}" not found (404) — update GEMINI_MODEL in backend/.env.`,
       auth_failed:
         '✗ Authentication failed — regenerate GEMINI_API_KEY at https://aistudio.google.com/app/apikey',
       network_failure:
-        '✗ Network failure — check internet access and firewall. ' +
-        'Test with: curl https://generativelanguage.googleapis.com',
+        '✗ Network failure — check internet access. Test: curl https://generativelanguage.googleapis.com',
       unknown:
         '✗ Unexpected error — see full error dump above.',
     };
-
     console.warn(`[Gemini] ${advice[reason] ?? advice.unknown}`);
   }
 }
@@ -304,17 +461,26 @@ export async function runGeminiHealthCheck(apiKey: string, modelName: string): P
 
 export function getAiExplainer(): IAiExplainer {
   if (config.GEMINI_API_KEY) {
-    return new GeminiExplainer(config.GEMINI_API_KEY, config.GEMINI_MODEL);
+    return new GeminiExplainer(
+      config.GEMINI_API_KEY,
+      config.GEMINI_MODEL,
+      config.GEMINI_TIMEOUT_MS,
+    );
   }
 
   console.warn(
-    '[gemini.service] GEMINI_API_KEY not set — AI explanations disabled. ' +
-    'Add GEMINI_API_KEY to .env to enable.',
+    '[gemini.service] GEMINI_API_KEY not set — using deterministic explanations. ' +
+    'Add GEMINI_API_KEY to .env to enable Gemini.',
   );
   return new NoopExplainer();
 }
 
-export async function generateExplanation(scanResult: ScanResponse): Promise<string> {
+/**
+ * Convenience wrapper used by scan.service.ts.
+ * Returns a full ExplanationResult (explanation + provider label).
+ * Never throws.
+ */
+export async function generateExplanation(scanResult: ScanResponse): Promise<ExplanationResult> {
   const explainer = getAiExplainer();
   return explainer.generateExplanation(scanResult);
 }

@@ -13,9 +13,19 @@
  *   0  – 30   Safe
  *   31 – 70   Suspicious
  *   71 – 100  Dangerous
+ *
+ * DESIGN PHILOSOPHY
+ * ──────────────────
+ * Individual weak signals (e.g. a suspicious TLD, a keyword in a path) score
+ * in the Suspicious band on their own. Only the combination of multiple
+ * independent signals — or a single very strong signal (IP address, brand
+ * impersonation with action keywords) — pushes a URL into Dangerous.
+ *
+ * This keeps false positives extremely low while raising recall for genuine
+ * multi-signal phishing URLs.
  */
 
-import type { PhishingChecks, RiskLevel } from '../models/scan.model';
+import type { PhishingChecks, RiskLevel, ScoreContribution } from '../models/scan.model';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Weight table
@@ -63,6 +73,50 @@ export const SCORE_WEIGHTS = {
   impersonationTldCombo: 25,
 
   /**
+   * Additional penalty when brand impersonation is detected AND phishing
+   * action keywords are present in the URL path or query.
+   *
+   * This covers cases like:
+   *   paypal-helpdesk.com/update          (brand + path keyword)
+   *   secure-paypal-login.com/verify-account  (brand + path keyword)
+   *
+   * These URLs are NOT on a suspicious TLD but the brand+keyword+action
+   * combination is strong evidence of phishing.
+   */
+  impersonationActionCombo: 20,
+
+  /**
+   * Additional penalty when brand impersonation + multiple hyphens
+   * in the hostname + action keyword in path all co-occur.
+   * Covers "secure-paypal-login.com/verify-account" style URLs.
+   */
+  impersonationHyphenActionCombo: 5,
+
+  /**
+   * Additional penalty when brand impersonation AND excessive subdomain
+   * nesting co-occur.
+   *
+   * This covers "login.secure.paypal-helpdesk.com/update" style URLs
+   * where the attacker uses deep subdomains to make the URL look legitimate
+   * at a glance.
+   *
+   * We only add this bonus when keyword signals are also present, to ensure
+   * legitimate CDN/API subdomains don't get penalised.
+   */
+  impersonationSubdomainCombo: 10,
+
+  /**
+   * Additional penalty when a suspicious TLD AND multiple prize/scam keywords
+   * co-occur in the URL.
+   *
+   * This covers "free-gift-claim.xyz/winner?prize=iphone" style prize scams
+   * that lack brand impersonation but combine multiple strong scam signals.
+   *
+   * Triggers when: suspiciousTld=true AND ≥2 prize/scam keywords present.
+   */
+  prizeScamCombo: 40,
+
+  /**
    * Per-hyphen penalty applied for each hyphen above the "normal" threshold.
    * A single domain like "my-company.com" is fine; "secure-paypal-login.com" is not.
    */
@@ -76,7 +130,7 @@ export const SCORE_WEIGHTS = {
    * Capped to avoid runaway scoring from many keywords.
    */
   keywordPenalty: 5,
-  maxKeywordScore: 20, // total keyword contribution never exceeds this
+  maxKeywordScore: 25, // total keyword contribution never exceeds this
 
   /**
    * Reputation provider verdict.
@@ -94,64 +148,158 @@ export const HYPHEN_PENALTY_THRESHOLD = 1;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Calculates the aggregate risk score from a completed PhishingChecks object.
+ * Calculates the aggregate risk score AND a per-signal breakdown from a
+ * completed PhishingChecks object.
+ *
+ * The breakdown array explains every point contribution so the frontend and
+ * audit trail can show exactly why a URL scored as it did.
  *
  * @param checks  Fully populated PhishingChecks (after all detectors have run)
- * @returns       Integer in the range [0, 100]
+ * @returns       { score: number [0–100], breakdown: ScoreContribution[] }
  */
-export function calculateScore(checks: PhishingChecks): number {
+export function calculateScoreWithBreakdown(
+  checks: PhishingChecks,
+): { score: number; breakdown: ScoreContribution[] } {
   let score = 0;
+  const breakdown: ScoreContribution[] = [];
 
   // ── Structural signals ────────────────────────────────────────────────────
-  if (!checks.https)          score += SCORE_WEIGHTS.noHttps;
-  if (checks.ipAddress)       score += SCORE_WEIGHTS.ipAddress;
-  if (checks.urlShortener)    score += SCORE_WEIGHTS.urlShortener;
-  if (checks.longUrl)         score += SCORE_WEIGHTS.longUrl;
-  if (checks.suspiciousTld)   score += SCORE_WEIGHTS.suspiciousTld;
-  if (checks.manySubdomains)  score += SCORE_WEIGHTS.manySubdomains;
-  if (checks.hasEncodedChars) score += SCORE_WEIGHTS.encodedChars;
+  if (!checks.https) {
+    const pts = SCORE_WEIGHTS.noHttps;
+    score += pts;
+    breakdown.push({ signal: 'noHttps', description: 'URL uses HTTP instead of HTTPS — connection is unencrypted', points: pts, severity: 'high' });
+  }
+  if (checks.ipAddress) {
+    const pts = SCORE_WEIGHTS.ipAddress;
+    score += pts;
+    breakdown.push({ signal: 'ipAddress', description: 'Hostname is a raw IP address rather than a registered domain name — a common indicator of phishing infrastructure', points: pts, severity: 'critical' });
+  }
+  if (checks.urlShortener) {
+    const pts = SCORE_WEIGHTS.urlShortener;
+    score += pts;
+    breakdown.push({ signal: 'urlShortener', description: 'URL passes through a shortener service that hides the real destination', points: pts, severity: 'medium' });
+  }
+  if (checks.longUrl) {
+    const pts = SCORE_WEIGHTS.longUrl;
+    score += pts;
+    breakdown.push({ signal: 'longUrl', description: 'URL is unusually long — often used to hide the real destination in query parameters', points: pts, severity: 'low' });
+  }
+  if (checks.suspiciousTld) {
+    const pts = SCORE_WEIGHTS.suspiciousTld;
+    score += pts;
+    breakdown.push({ signal: 'suspiciousTld', description: 'Domain uses a high-risk or commonly abused top-level domain', points: pts, severity: 'medium' });
+  }
+  if (checks.manySubdomains) {
+    const pts = SCORE_WEIGHTS.manySubdomains;
+    score += pts;
+    breakdown.push({ signal: 'manySubdomains', description: 'Hostname has excessive subdomain nesting — a technique used to hide the real domain', points: pts, severity: 'medium' });
+  }
+  if (checks.hasEncodedChars) {
+    const pts = SCORE_WEIGHTS.encodedChars;
+    score += pts;
+    breakdown.push({ signal: 'encodedChars', description: 'URL contains percent-encoded characters that may obfuscate the true destination', points: pts, severity: 'low' });
+  }
 
   // ── Hyphen penalty (per extra hyphen above threshold) ─────────────────────
   const extraHyphens = Math.max(0, checks.hyphenCount - HYPHEN_PENALTY_THRESHOLD);
-  score += extraHyphens * SCORE_WEIGHTS.hyphenPenalty;
+  if (extraHyphens > 0) {
+    const pts = extraHyphens * SCORE_WEIGHTS.hyphenPenalty;
+    score += pts;
+    breakdown.push({ signal: 'hyphenCount', description: `Hostname contains ${checks.hyphenCount} hyphens (${extraHyphens} above the normal threshold)`, points: pts, severity: 'low' });
+  }
 
   // ── Keyword penalty (capped) ──────────────────────────────────────────────
   const rawKeywordScore = checks.suspiciousKeywords.length * SCORE_WEIGHTS.keywordPenalty;
-  score += Math.min(rawKeywordScore, SCORE_WEIGHTS.maxKeywordScore);
+  const keywordScore = Math.min(rawKeywordScore, SCORE_WEIGHTS.maxKeywordScore);
+  if (keywordScore > 0) {
+    score += keywordScore;
+    breakdown.push({ signal: 'suspiciousKeywords', description: `Contains phishing action keywords: ${checks.suspiciousKeywords.slice(0, 4).join(', ')}`, points: keywordScore, severity: 'medium' });
+  }
 
   // ── Brand impersonation (only when NOT a trusted domain) ─────────────────
   if (checks.brandImpersonation !== null && !checks.isTrustedDomain) {
-    score += SCORE_WEIGHTS.brandImpersonation;
+    const basePts = SCORE_WEIGHTS.brandImpersonation;
+    score += basePts;
+    breakdown.push({ signal: 'brandImpersonation', description: `Hostname appears to impersonate the "${checks.brandImpersonation.brand}" brand`, points: basePts, severity: 'critical' });
 
-    // Combination bonus: brand impersonation on a suspicious TLD is a
-    // near-certain phishing signal — push it firmly into Dangerous.
+    // Combination bonus 1: brand + suspicious TLD
     if (checks.suspiciousTld) {
-      score += SCORE_WEIGHTS.impersonationTldCombo;
+      const pts = SCORE_WEIGHTS.impersonationTldCombo;
+      score += pts;
+      breakdown.push({ signal: 'impersonationTldCombo', description: `Brand impersonation combined with a high-risk TLD — near-certain phishing`, points: pts, severity: 'critical' });
+    }
+
+    // Combination bonus 2: brand + action keywords
+    if (checks.suspiciousKeywords.length > 0) {
+      const pts = SCORE_WEIGHTS.impersonationActionCombo;
+      score += pts;
+      breakdown.push({ signal: 'impersonationActionCombo', description: `Brand impersonation combined with action/urgency keywords in the URL path`, points: pts, severity: 'critical' });
+
+      // Combination bonus 3: also has multiple hyphens
+      if (extraHyphens >= 1) {
+        const pts2 = SCORE_WEIGHTS.impersonationHyphenActionCombo;
+        score += pts2;
+        breakdown.push({ signal: 'impersonationHyphenActionCombo', description: `Brand impersonation with multiple hyphens and action keywords — high confidence phishing pattern`, points: pts2, severity: 'high' });
+      }
+
+      // Combination bonus 4: brand + deep subdomains
+      if (checks.manySubdomains) {
+        const pts3 = SCORE_WEIGHTS.impersonationSubdomainCombo;
+        score += pts3;
+        breakdown.push({ signal: 'impersonationSubdomainCombo', description: `Brand impersonation with deep subdomain nesting — attacker using fake subdomains to look legitimate`, points: pts3, severity: 'high' });
+      }
+    }
+  }
+
+  // ── Prize/scam combination signal ────────────────────────────────────────
+  if (!checks.isTrustedDomain && checks.suspiciousTld) {
+    const scamKeywords = new Set(['winner', 'prize', 'free-gift', 'gift-claim', 'claim', 'reward', 'lucky', 'free-iphone', 'win-prize', 'claim-prize', 'gift']);
+    const scamHits = checks.suspiciousKeywords.filter((kw) => scamKeywords.has(kw)).length;
+    if (scamHits >= 2) {
+      const pts = SCORE_WEIGHTS.prizeScamCombo;
+      score += pts;
+      breakdown.push({ signal: 'prizeScamCombo', description: `Suspicious TLD combined with multiple prize/scam keywords — prize-scam phishing pattern`, points: pts, severity: 'critical' });
     }
   }
 
   // ── Reputation provider result ────────────────────────────────────────────
   if (checks.reputation.status === 'malicious') {
-    score += SCORE_WEIGHTS.reputationMalicious;
+    const pts = SCORE_WEIGHTS.reputationMalicious;
+    score += pts;
+    breakdown.push({ signal: 'reputationMalicious', description: `Flagged as malicious by ${checks.reputation.source ?? 'reputation provider'}`, points: pts, severity: 'critical' });
   } else if (checks.reputation.status === 'suspicious') {
-    score += SCORE_WEIGHTS.reputationSuspicious;
+    const pts = SCORE_WEIGHTS.reputationSuspicious;
+    score += pts;
+    breakdown.push({ signal: 'reputationSuspicious', description: `Flagged as suspicious by ${checks.reputation.source ?? 'reputation provider'}`, points: pts, severity: 'high' });
   }
 
   // ── Trusted domain discount ───────────────────────────────────────────────
-  // A fully trusted domain gets a score floor — we never score a trusted
-  // domain as Dangerous purely from keyword/structural checks.
-  // (The ip / reputation checks are still valid even for trusted domains.)
   if (checks.isTrustedDomain) {
-    // Remove keyword, subdomain, hyphen, and encoding scores —
-    // those signals are not meaningful on real brand domains.
-    score -= rawKeywordScore;
-    score -= (checks.manySubdomains ? SCORE_WEIGHTS.manySubdomains : 0);
-    score -= extraHyphens * SCORE_WEIGHTS.hyphenPenalty;
-    score -= (checks.hasEncodedChars ? SCORE_WEIGHTS.encodedChars : 0);
+    const discount = rawKeywordScore +
+      (checks.manySubdomains ? SCORE_WEIGHTS.manySubdomains : 0) +
+      extraHyphens * SCORE_WEIGHTS.hyphenPenalty +
+      (checks.hasEncodedChars ? SCORE_WEIGHTS.encodedChars : 0);
+
+    if (discount > 0) {
+      score -= discount;
+      breakdown.push({ signal: 'trustedDomainDiscount', description: `Domain is on the trusted whitelist — keyword, subdomain, hyphen and encoding signals removed`, points: -discount, severity: 'info' });
+    }
   }
 
   // Clamp to [0, 100]
-  return Math.min(100, Math.max(0, Math.round(score)));
+  const finalScore = Math.min(100, Math.max(0, Math.round(score)));
+  return { score: finalScore, breakdown };
+}
+
+/**
+ * Calculates the aggregate risk score from a completed PhishingChecks object.
+ * Backward-compatible wrapper around calculateScoreWithBreakdown.
+ *
+ * @param checks  Fully populated PhishingChecks (after all detectors have run)
+ * @returns       Integer in the range [0, 100]
+ */
+export function calculateScore(checks: PhishingChecks): number {
+  return calculateScoreWithBreakdown(checks).score;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

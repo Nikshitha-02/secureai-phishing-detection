@@ -115,11 +115,15 @@ export const ACTION_KEYWORDS: string[] = [
   'helpdesk',
   'invoice',
   'payment',
+  'billing',
   'webscr',
   'cmd=',
   'free',
   'winner',
   'prize',
+  'gift',
+  'claim',
+  'reward',
   'reset',
   'suspended',
   'unusual',
@@ -127,6 +131,28 @@ export const ACTION_KEYWORDS: string[] = [
   'locked',
   'alert',
   'unauthorized',
+  'unlock',
+  'recover',
+];
+
+/**
+ * Scam/prize keywords that are suspicious in the HOSTNAME itself
+ * (not just path/query). These are words a legitimate domain name would
+ * almost never contain, so we can scan the full hostname for them.
+ *
+ * This is deliberately narrow to avoid false positives. We do NOT include
+ * action words like 'login' or 'secure' here because legitimate service names
+ * may use those (e.g. "login.acme.com" is a real subdomain pattern).
+ */
+export const HOSTNAME_SCAM_KEYWORDS: string[] = [
+  'free-gift',
+  'gift-claim',
+  'prize-claim',
+  'winner',
+  'claim-prize',
+  'lucky',
+  'free-iphone',
+  'win-prize',
 ];
 
 /** Full URL lengths above this threshold are considered suspicious */
@@ -142,14 +168,51 @@ export const HYPHEN_PENALTY_THRESHOLD = 1;
 // Parsing
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Maximum URL length accepted by the parser. URLs longer than this are rejected. */
+export const MAX_URL_LENGTH = 2048;
+
 /**
  * Validates that the string is a parseable URL with an http/https scheme.
  * Returns the parsed URL object on success, or null on failure.
+ *
+ * Hardening added:
+ *  - Rejects URLs longer than MAX_URL_LENGTH (2048) characters
+ *  - Rejects URLs whose hostname is empty after parsing
+ *  - Strips trailing dots from hostname (e.g. "google.com." → "google.com")
+ *  - Lowercases hostname to ensure consistent comparisons downstream
  */
 export function parseUrl(raw: string): URL | null {
   try {
-    const parsed = new URL(raw.trim());
+    const trimmed = raw.trim();
+
+    // Reject URLs that are too long before attempting to parse
+    if (trimmed.length > MAX_URL_LENGTH) return null;
+
+    const parsed = new URL(trimmed);
+
     if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+
+    // Reject if hostname is empty (e.g. "http:///path")
+    if (!parsed.hostname) return null;
+
+    // Strip trailing dot(s) from hostname — "google.com." is technically valid DNS
+    // but causes all downstream comparisons (trusted-domain, TLD, brand) to fail.
+    if (parsed.hostname.endsWith('.')) {
+      // URL is frozen; reconstruct with cleaned hostname
+      const cleaned = parsed.hostname.replace(/\.+$/, '').toLowerCase();
+      if (!cleaned) return null;
+      // Replace hostname in the href and re-parse so all URL properties are consistent
+      const fixed = new URL(parsed.href.replace(parsed.hostname, cleaned));
+      return fixed;
+    }
+
+    // Ensure hostname is lowercased for all downstream checks
+    if (parsed.hostname !== parsed.hostname.toLowerCase()) {
+      const lower = parsed.hostname.toLowerCase();
+      const fixed = new URL(parsed.href.replace(parsed.hostname, lower));
+      return fixed;
+    }
+
     return parsed;
   } catch {
     return null;
@@ -198,9 +261,18 @@ export function checkLongUrl(parsed: URL): boolean {
  *
  * "secure.login.paypal.phish.com" → 5 labels → suspicious
  * "www.example.com"               → 3 labels → normal
+ *
+ * IP addresses are explicitly excluded: the octets of an IPv4 address
+ * (e.g. 192.168.1.1) are separated by dots but those dots do NOT represent
+ * DNS subdomain nesting. Applying subdomain depth analysis to an IP hostname
+ * would produce a misleading "excessive subdomain nesting" signal.
+ * The raw-IP signal (checkIpAddress) already covers that risk.
  */
 export function checkManySubdomains(parsed: URL): boolean {
-  const labels = parsed.hostname.split('.');
+  const host = parsed.hostname;
+  // Do not apply subdomain analysis to raw IP addresses
+  if (IPV4_RE.test(host) || IPV6_BRACKET_RE.test(host)) return false;
+  const labels = host.split('.');
   return labels.length > SUBDOMAIN_THRESHOLD;
 }
 
@@ -218,13 +290,26 @@ export function checkUrlShortener(parsed: URL): boolean {
  * Brand names are NOT searched here to avoid false positives on real brand domains.
  * Only matches against PATH and QUERY to avoid false positives on TLDs and hostnames.
  *
- * e.g. "https://evil.xyz/login?account=reset"  → ['login', 'account', 'reset']
- *      "https://google.com"                     → []
+ * Additionally checks the HOSTNAME for prize/scam compound patterns that are
+ * almost never present in legitimate domain names (e.g. "free-gift-claim").
+ *
+ * e.g. "https://evil.xyz/login?account=reset"         → ['login', 'account', 'reset']
+ *      "https://free-gift-claim.xyz/winner"            → ['winner', 'free-gift', 'gift-claim']
+ *      "https://google.com"                            → []
  */
 export function checkSuspiciousKeywords(parsed: URL): string[] {
-  // Only inspect path + query, not the hostname (brand check handles hostname)
-  const searchTarget = (parsed.pathname + parsed.search).toLowerCase();
-  return ACTION_KEYWORDS.filter((kw) => searchTarget.includes(kw));
+  // Path + query: check all action keywords
+  const pathAndQuery = (parsed.pathname + parsed.search).toLowerCase();
+  const matches = new Set<string>(ACTION_KEYWORDS.filter((kw) => pathAndQuery.includes(kw)));
+
+  // Hostname: only check narrow scam/prize compound patterns
+  // This detects "free-gift-claim.xyz" type domains without over-flagging
+  const hostname = parsed.hostname.toLowerCase();
+  for (const kw of HOSTNAME_SCAM_KEYWORDS) {
+    if (hostname.includes(kw)) matches.add(kw);
+  }
+
+  return Array.from(matches);
 }
 
 /**

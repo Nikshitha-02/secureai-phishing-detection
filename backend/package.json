@@ -12,7 +12,9 @@
     "lint": "eslint src --ext .ts --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.{ts,json}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,json}\""
+    "format:check": "prettier --check \"src/**/*.{ts,json}\"",
+    "evaluate": "tsc && node dist/evaluation/evaluate.js",
+    "adversarial": "tsc && node dist/evaluation/runAdversarial.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
